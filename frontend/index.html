@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>PCB Defect Detection</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            color: #1f2937;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #6b7280;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+        }
+
+        .upload-area {
+            display: block;
+            border: 2px dashed #9ca3af;
+            border-radius: 14px;
+            padding: 45px 20px;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .upload-area:hover {
+            border-color: #2563eb;
+            background: #f8fafc;
+        }
+
+        .upload-area input {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+        }
+
+        .upload-text {
+            margin-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .upload-hint {
+            margin-top: 8px;
+            color: #6b7280;
+        }
+
+        .preview {
+            display: none;
+            margin-top: 25px;
+            text-align: center;
+        }
+
+        .preview img {
+            max-width: 100%;
+            max-height: 450px;
+            border-radius: 12px;
+        }
+
+        button {
+            width: 100%;
+            margin-top: 20px;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            background: #2563eb;
+            color: white;
+            font-size: 17px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .status {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+            color: #6b7280;
+        }
+
+        .error {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .results {
+            display: none;
+        }
+
+        .summary {
+            text-align: center;
+            margin: 25px 0;
+        }
+
+        .count {
+            font-size: 42px;
+            font-weight: bold;
+            color: #2563eb;
+        }
+
+        .detection {
+            display: flex;
+            justify-content: space-between;
+            padding: 16px;
+            margin-bottom: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+        }
+
+        .defect-name {
+            font-weight: bold;
+        }
+
+        .confidence {
+            color: #2563eb;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="header">
+        <h1>PCB Defect Detection</h1>
+        <p>AI-powered PCB defect detection using YOLO</p>
+    </div>
+
+    <div class="card">
+
+        <label class="upload-area" for="fileInput">
+
+            <div class="upload-icon">📷</div>
+
+            <div class="upload-text">
+                Click to upload a PCB image
+            </div>
+
+            <div class="upload-hint">
+                JPG, JPEG or PNG
+            </div>
+
+            <input
+                type="file"
+                id="fileInput"
+                accept="image/*"
+            >
+
+        </label>
+
+        <div class="preview" id="preview">
+
+            <h3>Selected Image</h3>
+
+            <img
+                id="previewImage"
+                alt="PCB image"
+            >
+
+        </div>
+
+        <button
+            id="analyzeButton"
+            disabled
+        >
+            Analyze Image
+        </button>
+
+        <div
+            class="status"
+            id="status"
+        >
+            Analyzing image...
+        </div>
+
+        <div
+            class="error"
+            id="error"
+        ></div>
+
+    </div>
+
+
+    <div
+        class="card results"
+        id="results"
+    >
+
+        <h2>Detection Results</h2>
+
+        <div class="summary">
+
+            <div class="count" id="defectCount">
+                0
+            </div>
+
+            <div>
+                Defects Detected
+            </div>
+
+        </div>
+
+        <div id="detections"></div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+    /*
+     * IMPORTANT:
+     * After Railway gives us the public backend URL,
+     * replace this value.
+     *
+     * Example:
+     *
+     * const API_URL =
+     *     "https://pcb-defect-api-production.up.railway.app";
+     */
+
+    const API_URL = "YOUR_RAILWAY_URL";
+
+
+    const fileInput =
+        document.getElementById("fileInput");
+
+    const preview =
+        document.getElementById("preview");
+
+    const previewImage =
+        document.getElementById("previewImage");
+
+    const analyzeButton =
+        document.getElementById("analyzeButton");
+
+    const status =
+        document.getElementById("status");
+
+    const errorBox =
+        document.getElementById("error");
+
+    const results =
+        document.getElementById("results");
+
+    const defectCount =
+        document.getElementById("defectCount");
+
+    const detectionsContainer =
+        document.getElementById("detections");
+
+
+    let selectedFile = null;
+
+
+    fileInput.addEventListener(
+        "change",
+        function () {
+
+            const file = this.files[0];
+
+            if (!file) {
+                return;
+            }
+
+            selectedFile = file;
+
+            previewImage.src =
+                URL.createObjectURL(file);
+
+            preview.style.display =
+                "block";
+
+            analyzeButton.disabled =
+                false;
+
+            results.style.display =
+                "none";
+
+            errorBox.style.display =
+                "none";
+        }
+    );
+
+
+    analyzeButton.addEventListener(
+        "click",
+        async function () {
+
+            if (!selectedFile) {
+                return;
+            }
+
+            status.style.display =
+                "block";
+
+            errorBox.style.display =
+                "none";
+
+            results.style.display =
+                "none";
+
+            analyzeButton.disabled =
+                true;
+
+
+            const formData =
+                new FormData();
+
+            formData.append(
+                "file",
+                selectedFile
+            );
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        `${API_URL}/predict`,
+                        {
+                            method: "POST",
+                            body: formData
+                        }
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        data.detail ||
+                        "Prediction failed."
+                    );
+                }
+
+
+                defectCount.textContent =
+                    data.count;
+
+
+                detectionsContainer.innerHTML =
+                    "";
+
+
+                if (data.detections.length === 0) {
+
+                    detectionsContainer.innerHTML = `
+                        <div class="detection">
+                            <span class="defect-name">
+                                No defects detected
+                            </span>
+                        </div>
+                    `;
+
+                } else {
+
+                    data.detections.forEach(
+                        detection => {
+
+                            const item =
+                                document.createElement(
+                                    "div"
+                                );
+
+                            item.className =
+                                "detection";
+
+
+                            const confidence =
+                                (
+                                    detection.confidence
+                                    * 100
+                                ).toFixed(2);
+
+
+                            item.innerHTML = `
+                                <span class="defect-name">
+                                    ${formatName(
+                                        detection.class
+                                    )}
+                                </span>
+
+                                <span class="confidence">
+                                    ${confidence}%
+                                </span>
+                            `;
+
+
+                            detectionsContainer
+                                .appendChild(item);
+                        }
+                    );
+                }
+
+
+                results.style.display =
+                    "block";
+
+            }
+
+            catch (error) {
+
+                errorBox.textContent =
+                    "Error: " + error.message;
+
+                errorBox.style.display =
+                    "block";
+
+            }
+
+            finally {
+
+                status.style.display =
+                    "none";
+
+                analyzeButton.disabled =
+                    false;
+            }
+
+        }
+    );
+
+
+    function formatName(name) {
+
+        return name
+            .replaceAll("_", " ")
+            .replace(
+                /\b\w/g,
+                letter => letter.toUpperCase()
+            );
+    }
+
+</script>
+
+</body>
+</html>
